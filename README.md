@@ -48,6 +48,22 @@ Needs JDK 17+ and the Android SDK (compile SDK 35).
 
 `local.properties` needs `sdk.dir=/path/to/android-sdk`, or set `ANDROID_HOME`.
 
+## Installing
+
+The debug build is signed with the standard Android debug key, so it installs as it is:
+
+```sh
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+Or copy the APK to the phone and open it, allowing installs from that source. It uses the
+application id `dev.openimager.debug`, so it sits happily next to a release build.
+
+`./gradlew :app:assembleRelease` produces a minified but unsigned APK — sign that with your own key
+before installing it.
+
+Android 8.0 (API 26) or newer, and a phone that supports USB OTG for the card reader route.
+
 ## Layout
 
 ```
