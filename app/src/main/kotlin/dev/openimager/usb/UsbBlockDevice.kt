@@ -9,6 +9,8 @@ import android.hardware.usb.UsbManager
 import android.util.Log
 import dev.openimager.core.block.BlockDevice
 import dev.openimager.core.block.BlockDeviceException
+import dev.openimager.core.scsi.BulkOnlyTransport
+import dev.openimager.core.scsi.ScsiCommands
 import dev.openimager.core.util.be32
 import dev.openimager.core.util.be64
 import java.util.concurrent.atomic.AtomicInteger
@@ -33,8 +35,8 @@ class UsbBlockDevice private constructor(
 ) : BlockDevice {
 
     private val tagCounter = AtomicInteger(1)
-    private val cbw = ByteArray(CBW_LENGTH)
-    private val csw = ByteArray(CSW_LENGTH)
+    private val cbw = ByteArray(BulkOnlyTransport.CBW_LENGTH)
+    private val csw = ByteArray(BulkOnlyTransport.CSW_LENGTH)
     private var closed = false
 
     /** Blocks per SCSI command: 64 KiB keeps the bus busy without tripping short timeouts. */
@@ -97,9 +99,9 @@ class UsbBlockDevice private constructor(
         allowRetry: Boolean = true,
     ): Int {
         val tag = tagCounter.getAndIncrement()
-        buildCbw(tag, dataLength, directionIn, cdb)
+        BulkOnlyTransport.buildCommandBlock(cbw, tag, dataLength, directionIn, lun, cdb)
 
-        if (bulk(outEndpoint, cbw, 0, CBW_LENGTH) != CBW_LENGTH) {
+        if (bulk(outEndpoint, cbw, 0, cbw.size) != cbw.size) {
             reset()
             if (allowRetry) return command(cdb, data, dataOffset, dataLength, directionIn, allowRetry = false)
             throw BlockDeviceException("the card reader did not accept a command")
@@ -117,8 +119,8 @@ class UsbBlockDevice private constructor(
 
         val status = readStatus(tag)
         when (status) {
-            STATUS_PASS -> return transferred
-            STATUS_FAILED -> {
+            BulkOnlyTransport.STATUS_PASSED -> return transferred
+            BulkOnlyTransport.STATUS_FAILED -> {
                 val sense = requestSense()
                 if (allowRetry && ScsiCommands.senseKey(sense) == SENSE_UNIT_ATTENTION) {
                     return command(cdb, data, dataOffset, dataLength, directionIn, allowRetry = false)
@@ -132,30 +134,19 @@ class UsbBlockDevice private constructor(
         }
     }
 
-    private fun buildCbw(tag: Int, dataLength: Int, directionIn: Boolean, cdb: ByteArray) {
-        java.util.Arrays.fill(cbw, 0)
-        writeLe32(cbw, 0, CBW_SIGNATURE)
-        writeLe32(cbw, 4, tag.toLong())
-        writeLe32(cbw, 8, dataLength.toLong())
-        cbw[12] = if (directionIn) 0x80.toByte() else 0x00
-        cbw[13] = lun.toByte()
-        cbw[14] = cdb.size.toByte()
-        System.arraycopy(cdb, 0, cbw, 15, cdb.size)
-    }
-
     private fun readStatus(expectedTag: Int): Int {
-        var read = bulk(inEndpoint, csw, 0, CSW_LENGTH)
-        if (read != CSW_LENGTH) {
+        var read = bulk(inEndpoint, csw, 0, csw.size)
+        if (read != csw.size) {
             // A stalled status phase is recoverable: clear the halt and ask again.
             clearHalt(inEndpoint)
-            read = bulk(inEndpoint, csw, 0, CSW_LENGTH)
+            read = bulk(inEndpoint, csw, 0, csw.size)
         }
-        if (read != CSW_LENGTH) throw BlockDeviceException("the card reader stopped responding")
-        if (readLe32(csw, 0) != CSW_SIGNATURE) throw BlockDeviceException("malformed status from the card reader")
-        if (readLe32(csw, 4) != expectedTag.toLong()) {
-            throw BlockDeviceException("the card reader answered a different command")
+        if (read != csw.size) throw BlockDeviceException("the card reader stopped responding")
+        return try {
+            BulkOnlyTransport.parseStatus(csw, expectedTag).status
+        } catch (e: BulkOnlyTransport.ProtocolException) {
+            throw BlockDeviceException(e.message ?: "the card reader sent an unusable status")
         }
-        return csw[12].toInt() and 0xFF
     }
 
     private fun requestSense(): ByteArray {
@@ -193,12 +184,6 @@ class UsbBlockDevice private constructor(
 
     companion object {
         private const val TAG = "UsbBlockDevice"
-        private const val CBW_LENGTH = 31
-        private const val CSW_LENGTH = 13
-        private const val CBW_SIGNATURE = 0x43425355L
-        private const val CSW_SIGNATURE = 0x53425355L
-        private const val STATUS_PASS = 0
-        private const val STATUS_FAILED = 1
         private const val SENSE_UNIT_ATTENTION = 0x06
         private const val TIMEOUT_MS = 20_000
         private const val MAX_BULK_TRANSFER = 16 * 1024
@@ -334,14 +319,5 @@ class UsbBlockDevice private constructor(
             return if (result == 1) (buffer[0].toInt() and 0x0F) else 0
         }
 
-        private fun writeLe32(buffer: ByteArray, index: Int, value: Long) {
-            for (i in 0 until 4) buffer[index + i] = ((value ushr (8 * i)) and 0xFF).toByte()
-        }
-
-        private fun readLe32(buffer: ByteArray, index: Int): Long {
-            var value = 0L
-            for (i in 0 until 4) value = value or ((buffer[index + i].toLong() and 0xFF) shl (8 * i))
-            return value
-        }
     }
 }

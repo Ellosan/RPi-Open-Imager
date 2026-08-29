@@ -1,4 +1,4 @@
-package dev.openimager.usb
+package dev.openimager.core.scsi
 
 import dev.openimager.core.util.putBe16
 import dev.openimager.core.util.putBe32
@@ -7,7 +7,7 @@ import dev.openimager.core.util.putBe32
  * The handful of SCSI Block Commands a card writer needs, as raw command descriptor blocks.
  * Everything travels inside the USB Bulk Only Transport wrapper built by [UsbBlockDevice].
  */
-internal object ScsiCommands {
+object ScsiCommands {
 
     const val INQUIRY_LENGTH = 36
     const val REQUEST_SENSE_LENGTH = 18
@@ -83,7 +83,7 @@ internal object ScsiCommands {
             key == 0x06 -> "the card was swapped or reset during the operation"
             key == 0x03 -> "the card reported a media error - it may be failing"
             key == 0x05 -> "the card reader rejected the command"
-            else -> "SCSI error (sense key 0x%X, asc 0x%02X, ascq 0x%02X)".format(key, asc, ascq)
+            else -> String.format("SCSI error (sense key 0x%02X, asc 0x%02X, ascq 0x%02X)", key, asc, ascq)
         }
     }
 

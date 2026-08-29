@@ -70,13 +70,15 @@ customise pipeline run on a plain JVM.
 - `core/customization/` — `firstrun.sh` and cloud-init generation matching Raspberry Pi Imager's
   own output (including the `raspberrypi-sys-mods` and `userconf-pi` paths), SHA-512 crypt, and
   WPA PSK derivation.
-- `app/usb/UsbBlockDevice.kt` — the mass storage driver: command wrapper, data phase, status
-  wrapper, stall recovery and sense decoding, so a locked card reports "the card is write
-  protected" rather than a numeric error.
+- `core/scsi/` — the Bulk Only Transport wrappers and SCSI command blocks, kept away from the
+  Android USB plumbing so they can be checked byte for byte.
+- `app/usb/UsbBlockDevice.kt` — the mass storage driver on top of them: LUN probing, data phase,
+  stall recovery and sense decoding, so a locked card reports "the card is write protected" rather
+  than a numeric error.
 
 ## Testing
 
-`./gradlew :core:test` runs 25 tests that check the risky parts against outside references rather
+`./gradlew :core:test` runs 34 tests that check the risky parts against outside references rather
 than against themselves:
 
 - FAT volumes are created with `mkfs.vfat`, written by this code, then checked with `fsck.vfat` and
@@ -87,6 +89,10 @@ than against themselves:
 - A Pi shaped disk image (MBR plus a FAT boot partition) is built, xz compressed, written through
   the real pipeline onto a file backed card, verified, customised, and the result inspected with
   `mtools`.
+- The USB command and status wrappers and the SCSI command blocks are asserted byte for byte
+  against the Bulk Only Transport layout, since a misplaced field there means sectors written to
+  the wrong place.
+- xz, gzip, bzip2, zip and raw images are round tripped through the decompressor.
 
 The FAT and image tests skip themselves when `dosfstools` and `mtools` are not installed.
 
