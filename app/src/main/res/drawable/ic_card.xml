@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Memory card silhouette: the shape this app writes to. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M40,26 L62,26 L76,40 L76,78 A6,6 0 0,1 70,84 L40,84 A6,6 0 0,1 34,78 L34,32 A6,6 0 0,1 40,26 Z" />
+    <path
+        android:fillColor="#C51A4A"
+        android:pathData="M42,32 L46,32 A1,1 0 0,1 47,33 L47,45 A1,1 0 0,1 46,46 L42,46 A1,1 0 0,1 41,45 L41,33 A1,1 0 0,1 42,32 Z" />
+    <path
+        android:fillColor="#C51A4A"
+        android:pathData="M52,32 L56,32 A1,1 0 0,1 57,33 L57,45 A1,1 0 0,1 56,46 L52,46 A1,1 0 0,1 51,45 L51,33 A1,1 0 0,1 52,32 Z" />
+    <path
+        android:fillColor="#C51A4A"
+        android:pathData="M62,42 L66,42 A1,1 0 0,1 67,43 L67,50 A1,1 0 0,1 66,51 L62,51 A1,1 0 0,1 61,50 L61,43 A1,1 0 0,1 62,42 Z" />
+    <path
+        android:fillColor="#C51A4A"
+        android:pathData="M42,56 L68,56 A2,2 0 0,1 70,58 L70,60 A2,2 0 0,1 68,62 L42,62 A2,2 0 0,1 40,60 L40,58 A2,2 0 0,1 42,56 Z" />
+    <path
+        android:fillColor="#C51A4A"
+        android:pathData="M42,68 L60,68 A2,2 0 0,1 62,70 L62,72 A2,2 0 0,1 60,74 L42,74 A2,2 0 0,1 40,72 L40,70 A2,2 0 0,1 42,68 Z" />
+</vector>
