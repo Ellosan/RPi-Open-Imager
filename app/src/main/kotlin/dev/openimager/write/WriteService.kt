@@ -58,21 +58,20 @@ class WriteService : Service() {
     }
 
     private fun start() {
-        val request = WriteCoordinator.consume()
-        if (request == null) {
-            stopSelf()
-            return
-        }
-
-        val notification = buildNotification("Preparing ${request.imageLabel}", null, ongoing = true)
+        // Android gives a service started with startForegroundService only a few seconds to post
+        // its notification, so do that before anything that could bail out.
+        val notification = buildNotification("Preparing", null, ongoing = true)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-            )
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
             startForeground(NOTIFICATION_ID, notification)
+        }
+
+        val request = WriteCoordinator.consume()
+        if (request == null) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
         }
         acquireWakeLock()
 

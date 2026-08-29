@@ -81,7 +81,7 @@ class UsbBlockDevice private constructor(
                 useLongCommands -> ScsiCommands.write16(lba, blocks)
                 else -> ScsiCommands.write10(lba, blocks)
             }
-            command(cdb, buffer, offset, bytes, directionIn = reading)
+            command(cdb, buffer, offset, bytes, directionIn = reading, requireFullTransfer = true)
             lba += blocks
             remaining -= blocks
             offset += bytes
@@ -97,13 +97,16 @@ class UsbBlockDevice private constructor(
         dataLength: Int,
         directionIn: Boolean,
         allowRetry: Boolean = true,
+        requireFullTransfer: Boolean = false,
     ): Int {
         val tag = tagCounter.getAndIncrement()
         BulkOnlyTransport.buildCommandBlock(cbw, tag, dataLength, directionIn, lun, cdb)
 
         if (bulk(outEndpoint, cbw, 0, cbw.size) != cbw.size) {
             reset()
-            if (allowRetry) return command(cdb, data, dataOffset, dataLength, directionIn, allowRetry = false)
+            if (allowRetry) {
+                return command(cdb, data, dataOffset, dataLength, directionIn, false, requireFullTransfer)
+            }
             throw BlockDeviceException("the card reader did not accept a command")
         }
 
@@ -118,12 +121,23 @@ class UsbBlockDevice private constructor(
         }
 
         val status = readStatus(tag)
-        when (status) {
-            BulkOnlyTransport.STATUS_PASSED -> return transferred
+        when (status.status) {
+            BulkOnlyTransport.STATUS_PASSED -> {
+                // A short data phase on READ or WRITE means sectors are missing, even though the
+                // device called the command a success. Commands such as INQUIRY may legitimately
+                // return less than was asked for, so only block transfers insist on the full count.
+                if (requireFullTransfer && (transferred != dataLength || status.residue != 0L)) {
+                    throw BlockDeviceException(
+                        "the card reader moved $transferred of $dataLength bytes " +
+                            "(residue ${status.residue})",
+                    )
+                }
+                return transferred
+            }
             BulkOnlyTransport.STATUS_FAILED -> {
                 val sense = requestSense()
                 if (allowRetry && ScsiCommands.senseKey(sense) == SENSE_UNIT_ATTENTION) {
-                    return command(cdb, data, dataOffset, dataLength, directionIn, allowRetry = false)
+                    return command(cdb, data, dataOffset, dataLength, directionIn, false, requireFullTransfer)
                 }
                 throw BlockDeviceException(ScsiCommands.describeSense(sense))
             }
@@ -134,7 +148,7 @@ class UsbBlockDevice private constructor(
         }
     }
 
-    private fun readStatus(expectedTag: Int): Int {
+    private fun readStatus(expectedTag: Int): BulkOnlyTransport.Status {
         var read = bulk(inEndpoint, csw, 0, csw.size)
         if (read != csw.size) {
             // A stalled status phase is recoverable: clear the halt and ask again.
@@ -143,7 +157,7 @@ class UsbBlockDevice private constructor(
         }
         if (read != csw.size) throw BlockDeviceException("the card reader stopped responding")
         return try {
-            BulkOnlyTransport.parseStatus(csw, expectedTag).status
+            BulkOnlyTransport.parseStatus(csw, expectedTag)
         } catch (e: BulkOnlyTransport.ProtocolException) {
             throw BlockDeviceException(e.message ?: "the card reader sent an unusable status")
         }
